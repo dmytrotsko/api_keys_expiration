@@ -1,29 +1,9 @@
-import argparse
 from collections import namedtuple
-from utils import get_cnx_cur, close_cnx
+
+import delphi.operations.secrets as secrets
+import mysql.connector
 
 API_USER_RECORD = namedtuple("APIUser", ("api_key", "email", "date_diff"))
-
-# DB_USER = "user"
-# DB_PASS = "pass"
-# DB_HOST = "0.0.0.0"
-# DB_NAME = "epidata"
-# DB_PORT = 13306
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        prog="Update api_user last_time_used column",
-        description="Update api_user last_time_used based on records in Redis"
-    )
-
-    parser.add_argument("-du", "--db_user", help="DB user")
-    parser.add_argument("-dup", "--db_user_password", help="DB user password")
-    parser.add_argument("-dh", "--db_host", help="DB host")
-    parser.add_argument("-dp", "--db_port", help="DB port")
-    parser.add_argument("-dn", "--db_name", help="DB name")
-    args = parser.parse_args()
-    return args
 
 
 def get_outdated_keys(cur):
@@ -63,15 +43,18 @@ def send_notification(api_key, email):
 
 
 def main():
-    args = parse_args()
-    cnx, cur = get_cnx_cur(db_user=args.db_user, db_user_password=args.db_user_password, db_host=args.db_host, db_name=args.db_name, db_port=args.db_port)
+    u, p = secrets.db.epi
+    cnx = mysql.connector.connect(database="epidata", user=u, password=p, host=secrets.db.host)
+    cur = cnx.cursor()
     outdated_keys_list = [API_USER_RECORD(*item) for item in get_outdated_keys(cur)]
     for item in outdated_keys_list:
         if item.date_diff == 5:
             send_notification(item.email)
         else:
             remove_outdated_key(cur, item.api_key)
-    close_cnx(cnx)
+    cur.close()
+    cnx.commit()
+    cnx.close()
 
 
 if __name__ == "__main__":
